@@ -1,0 +1,183 @@
+import matplotlib.pyplot as plt
+import random
+from mpl_toolkits.mplot3d import Axes3D
+import numpy as np
+import math
+
+from sympy import symbols, diff
+
+
+
+"""
+Optimization techniques to try:
+
+    Stochastic Gradient Descent
+
+    Mini-batching
+
+    SVRG
+
+    Momentum
+
+    Alternating Minimization Methods
+
+    Branch-and-bound methods
+
+
+
+
+
+
+
+
+"""
+
+
+
+
+
+def banana(x, y):
+
+    #x, y should be a single pair.
+
+
+    a = 1
+    b = 100
+
+    return ((a-x)**2) + (b*(y-(x**2)))**2
+
+
+    
+
+def sgd(x_list, y_list, z_list, learning_rate):
+
+    # pick a random x, y
+    
+    print(np.shape(x_list))
+
+    # initialize a random x and y and attempt to optimize
+    descending_x = x_list[random.randint(0, len(x_list)-1)] 
+    descending_y = y_list[random.randint(0, len(y_list)-1)]
+
+
+    for iterations in range(100):
+        rand_x = random.randint(0, len(x_list)-1)
+        rand_y = random.randint(0, len(y_list)-1)
+
+        #Compute partial with respect to x
+        # first, fix the 'y' and grab that array:
+
+        x_slice = z_list[rand_y]
+        partial_dx = np.gradient(x_slice) 
+        #now that we have a 'gradient' (sort of) for each element in this slice we 
+        # can pick out the one corresponding to our fixed x or y coord
+        x_grad = partial_dx[rand_x] 
+
+    
+        y_slice = np.transpose(z_list)[rand_x]
+        partial_dy = np.gradient(y_slice)
+        y_grad = partial_dy[rand_y]
+
+        descending_x -= (learning_rate * x_grad) 
+        descending_y -= (learning_rate * y_grad)
+
+
+
+    print(str(descending_x), str(descending_y))
+    return (descending_x, descending_y)
+
+
+
+def plot_3d(X, Y, Z, (x_min, y_min)):
+    
+    fig = plt.figure()
+    ax = Axes3D(fig)
+
+
+    
+    #print(len(X))
+    #print(len(Y))
+    #print(len(Z))
+
+
+    #print(Z)
+    print("=========================================================")
+
+
+    ax.plot_surface(Y, X, Z, rstride=1, cstride=1, cmap="terrain")
+    ax.text(x_min, y_min, ("GLOBAL MIN: " + str(x_min) + " " + str(y_min)), size=20) 
+    plt.show()
+
+
+
+def __main__():
+
+    
+    x_list = [x for x in np.arange(-1, 1.01, 0.001)]
+    
+    y_list = [x for x in np.arange(-1, 1.01, 0.001)]
+
+
+    #Note: when plotting function it may be best to just use
+    #a subset of the total samples so that it may render.
+
+    Y, X = np.meshgrid(y_list, x_list)
+
+    z_list = np.empty([len(x_list), len(y_list)])
+    for y_index in range(len(y_list)):
+        print("y_index = " + str(y_index))
+        for x_index in range(len(x_list)):
+            z = banana(x_list[x_index], y_list[y_index])
+            z_list[y_index][x_index] = z
+    
+     
+    print("Finshed computing Rosenbrock Banana")
+
+    x_min, y_min = sgd(x_list, y_list, z_list, 0.1)
+    
+    
+
+    
+    offset = 100
+    
+    
+    
+    plot_x_list = [x_list[x] for x in np.arange(0, len(x_list), offset)]
+    plot_y_list = [y_list[y] for y in np.arange(0, len(y_list), offset)]
+
+    #plot_x_list = np.rint(plot_x_list)
+    #plot_y_list = np.rint(plot_y_list)
+
+
+
+    plot_z_list = np.empty([len(plot_y_list), len(plot_x_list)])
+
+    print(len(z_list[0]))
+
+    #Fill up plot-z list
+    for y in range(len(plot_y_list)):
+        print("Y: " + str(y*offset))
+        for x in range(len(plot_x_list)):
+            print("X: " + str(x*offset))
+            plot_z_list[y][x] = z_list[y*offset][x*offset]
+         
+    plot_z_list = np.rint(plot_z_list)
+
+    
+    Y, X = np.meshgrid(plot_y_list, plot_x_list) 
+    print("Meshed grid!") 
+    
+    print(len(X))
+    print(len(Y))
+    print(len(plot_z_list))
+
+
+    plot_3d(X, Y, plot_z_list)
+
+
+
+
+
+
+
+__main__()
