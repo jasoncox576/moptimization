@@ -15,7 +15,7 @@ from functions import *
 RAND_SEED = random.randint(1, 1000)
 
 #set testing landscape
-FUNC = sphere_func
+FUNC = himmelblau
 DOMAIN_MAX = 4
 DOMAIN_DX = 0.001
 
@@ -64,8 +64,156 @@ def nesterov_momentum(x_list, y_list, z_list, batches, epochs, learning_rate, al
 
 
 
+
+
+
+
+
 def normalize(x, minimum, maximum):
     return (x - minimum) / (maximum - minimum)
+
+def get_domain_index(x, z_list_len):
+    return int(normalize(x, -DOMAIN_MAX, DOMAIN_MAX) * z_list_len) 
+
+
+
+def diff_evol(x_list, y_list, z_list, batches):
+
+    pop_size = 100
+    f = 2
+    cross_prob = 0.9
+
+    
+
+
+
+
+
+
+def nelder_mead(x_list, y_list, z_list, batches):
+    
+    """
+    Downhill simplex method
+    """
+    lower_bound = int((len(x_list)/2) - (len(x_list)/4))
+    print(lower_bound)
+    upper_bound = int((len(x_list)/2) + (len(x_list)/4))
+    print(upper_bound)
+
+    domain_subsection = x_list[lower_bound:upper_bound]
+    print(str(domain_subsection[0]), str(domain_subsection[-1]))
+    
+    # each point is a three-tuple (x,y,z)
+    
+    p1_x = random.choice(domain_subsection)
+    print(str(p1_x))
+    p1_y = random.choice(domain_subsection)
+    print(str(p1_y))
+
+
+    p1 = [p1_x, p1_y, FUNC(p1_x, p1_y)]
+        
+    simplex_distance_offset = DOMAIN_MAX/2
+
+
+    
+    
+    p2 = [p1[0] + simplex_distance_offset, p1[1], 0] 
+    p2[2] = FUNC(p2[0], p2[1])
+   
+    p3 = [p1[0], p1[1] + simplex_distance_offset, 0]
+    p3[2] = FUNC(p3[0], p3[1])
+    
+          
+    simplex = [p1,p2,p3]
+    print("UNSORTED: " + str(simplex))
+
+
+    x_stops = []
+    y_stops = []
+    
+    # sorts based off of the height (z-coordinate)
+    # The simplex array should always be sorted
+    
+    for iteration in range(batches):
+        
+        simplex.sort(key = lambda x: x[2])
+        print("SORTED: " + str(simplex))
+
+        #compute the centroid from the points in the simplex sans p3
+        sums = [sum(x) for x in zip(*simplex[:-1])]
+        p0 = [sums[0]/3, sums[1]/3, FUNC(sums[0]/3, sums[1]/3)]
+
+        #compute reflected point (reflection of the fourth point across the centroid p0
+        #coeff of reflection initialized to 1
+        A = 1
+        pr = [0, 0, 0]
+        pr[0] = p0[0] + A*(p0[0] - simplex[-1][0]) 
+        pr[1] = p0[1] + A*(p0[1] - simplex[-1][1])
+        pr[2] = FUNC(pr[0], pr[1])
+         
+        if (pr[2] < simplex[-2][2]) and (pr[2] >= simplex[0][2]):
+            print("REFLECTION")
+            simplex[-2] = pr
+            continue
+
+        elif pr[2] < simplex[0][2]:
+            print("EXPANSION")
+            # coefficient gamma (G) must be > 1
+            G = 2
+            pe = [0, 0, 0]
+            pe[0] = p0[0] + G*(pr[0] - p0[0])
+            pe[1] = p0[1] + G*(pr[1] - p0[1])
+            pe[2] = FUNC(pe[0],pe[1]) 
+        
+            if pe[2] < pr[2]:
+                simplex[-1] = pe
+            else:
+                simplex[-1] = pr
+
+            continue 
+    
+        else:
+            # it is certain at this point that the reflected point is worse
+            # than the second worst point
+            print("CONTRACTION")
+            rho = 0.5
+
+            pc = [0, 0, 0]
+
+            pc[0] = p0[0] + rho*(simplex[-1][0] - p0[0])
+            pc[1] = p0[1] + rho*(simplex[-1][1] - p0[1])
+            pc[2] = FUNC(pc[0], pc[1])
+    
+            if pc[2] < simplex[-1][2]:
+                simplex[-1] = pc
+                continue
+
+            else:
+                # 'shrink' step
+                # replace all points except the first one
+                print("SHRINK")
+                sigma = 0.5
+
+                best_point = simplex[0]
+
+                for point in simplex[1:]:
+                    point[0] = best_point[0] + sigma*(point[0] - best_point[0]) 
+                    point[1] = best_point[1] + sigma*(point[1] - best_point[1]) 
+            
+        x_stops.append(p0[0])
+        y_stops.append(p0[1])
+        
+
+    for point in range(len(x_stops)):
+        z_list[get_domain_index(x_stops[point], len(z_list))][get_domain_index(y_stops[point], len(z_list))] *= 5
+
+    plt.plot(x_stops, label="amoeba-x")
+    plt.plot(y_stops, label="amoeba-y")
+    plt.legend(loc='upper right') 
+        
+    return ((p0[0], p0[1]), z_list)
+
 
 
 
@@ -108,9 +256,9 @@ def newton(x_list, y_list, z_list, batches, learning_rate):
     for iteration in range(batches):
 
         try:
-            index_prev_x = int(normalize(descending_x, -DOMAIN_MAX, DOMAIN_MAX) * len(z_list)) 
+            index_prev_x = get_domain_index(descending_x, len(z_list))
             print(index_prev_x)
-            index_prev_y = int(normalize(descending_y, -DOMAIN_MAX, DOMAIN_MAX) * len(z_list))
+            index_prev_y = get_domain_index(descending_y, len(z_list))
             print(index_prev_y)
 
             #for the hessian we compute the second order with respect to
@@ -135,9 +283,10 @@ def newton(x_list, y_list, z_list, batches, learning_rate):
             hessian_inv = np.linalg.inv(hessian)
             
             hessian_det = np.linalg.det(hessian_inv)
-
+            #do you really need hessian though if changing x and y individually? I guess you do.
             descending_x -= (learning_rate * hessian_det * x1_grad) 
             descending_y -= (learning_rate * hessian_det * y1_grad)
+
             
             x_stops.append(descending_x)
             y_stops.append(descending_y)
@@ -171,9 +320,9 @@ def gradient_descent(x_list, y_list, z_list, batches, epochs, learning_rate):
     for epoch in range(epochs): 
         for iterations in range(batches):
                
-            x_index = int(normalize(descending_x, -DOMAIN_MAX, DOMAIN_MAX) * len(z_list)) 
+            x_index = get_domain_index(descending_x, len(z_list)) 
             print(descending_x)
-            y_index = int(normalize(descending_y, -DOMAIN_MAX, DOMAIN_MAX) * len(z_list)) 
+            y_index = get_domain_index(descending_y, len(z_list))  
 
 
             #Compute partial with respect to x
@@ -382,10 +531,12 @@ def __main__():
     #minimum_coords_2 = sgd(x_list, y_list, z_list, 100, 500, 1, True, 0.5)
 
     #minimum_coords_1 = gradient_descent(x_list, y_list, z_list, 100, 1000, 0.1)
-    minimum_coords_1 = newton(x_list, y_list, z_list, 10, 0.000000000001)
+    #minimum_coords_1 = newton(x_list, y_list, z_list, 500, 0.00000000001)
+    minimum_coords_1, z_list = nelder_mead(x_list, y_list, z_list, 1000)
 
-    
-    offset = 200
+
+    #lower offset gives a more accurate function 
+    offset = DOMAIN_DX
     
     
     
