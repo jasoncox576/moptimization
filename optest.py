@@ -1,6 +1,4 @@
 import os.path
-from mpl_toolkits.mplot3d import Axes3D
-import matplotlib.pyplot as plt
 import pickle
 import numpy as np
 import math
@@ -15,36 +13,43 @@ from functions import *
 RAND_SEED = random.randint(1, 1000)
 
 #set testing landscape
-FUNC = himmelblau
-DOMAIN_MAX = 4
-DOMAIN_DX = 0.001
 
-"""
-Optimization techniques to try:
+def mark_topography(x_stops, y_stops, z_list):
 
-    Stochastic Gradient Descent
+    """ This function is necessary for visualization beause plotting
+        doesn't plot every single point used in the function.
 
-    Mini-batching
+        So we must 'pop up' a bunch of points in the surrounding area.
+    """
+    orig_z_list = z_list[:]
+    
 
-    SVRG
+    for point in range(int(len(x_stops))):
+        print("POINT:", str(x_stops[point]), str(y_stops[point]))
+        x_ind = get_domain_index(x_stops[point], len(z_list))
+        y_ind = get_domain_index(y_stops[point], len(z_list))
+        print("x_ind", str(x_ind), " y_ind", y_ind)
+        try:
 
-    Momentum
-
-    Alternating Minimization Methods
-
-    Branch-and-bound methods
-
-
-
-
-
-
-
-
-"""
-
-
-
+            if z_list[x_ind][y_ind] <= (orig_z_list[x_ind][y_ind]): z_list[x_ind][y_ind] *= 2
+            print("Increased val")
+        except IndexError:
+            print("index error")
+            continue
+            
+        for buf in range(-100, 100):
+            
+            try:
+                if z_list[x_ind][y_ind] <= 100:
+                    z_list[x_ind+buf][y_ind] += 50
+                    z_list[x_ind][y_ind+buf] += 50
+                    z_list[x_ind+buf][y_ind+buf] += 50
+                    z_list[x_ind-buf][y_ind+buf] += 50
+            except IndexError:
+                print("index error 2")
+                continue
+    
+    return z_list
 
 
 def nesterov_momentum(x_list, y_list, z_list, batches, epochs, learning_rate, alpha=0.0):
@@ -68,36 +73,102 @@ def nesterov_momentum(x_list, y_list, z_list, batches, epochs, learning_rate, al
 
 
 
+def diff_evol(FUNC, x_list, y_list, z_list, batches=5, learning_rate=None):
 
-def normalize(x, minimum, maximum):
-    return (x - minimum) / (maximum - minimum)
-
-def get_domain_index(x, z_list_len):
-    return int(normalize(x, -DOMAIN_MAX, DOMAIN_MAX) * z_list_len) 
-
-
-
-def diff_evol(x_list, y_list, z_list, batches):
-
-    pop_size = 100
-    f = 2
+    pop_size = 1000
+    
+    #known as differential weight, range [0,2]
+    f = 1e-100
+    
+    #cross probability- chance that a given point will be compared
+    # to a linear combination of other random points.
+    # it is only set equal to the new point if the new point is a better
+    # solution, of course
     cross_prob = 0.9
 
+    sample = [(random.choice(x_list), random.choice(y_list)) for x in range(pop_size)]
+
+    min_point = sample[0]
+    min_indices = get_domain_index(min_point[0], len(z_list)), get_domain_index(min_point[1], len(z_list))
+    min_val = z_list[min_indices[0]][min_indices[1]]
+    print("MIN VAL", min_val)
+
+    x_stops = [min_point[0]]
+    y_stops = [min_point[1]]
+    z_stops = [min_val]
+
+
+    for iteration in range(batches):
+        for point in sample:
+
+            a = (point[0], point[1])
+            b = (point[0], point[1])
+            c = (point[0], point[1])
+
+            while (a == point) or (b == point) or (c == point):
+                a_index, b_index, c_index = np.random.choice([x for x in range(len(sample))], 3, replace=False)
+                a = sample[a_index]
+                b = sample[b_index]
+                c = sample[c_index]
+
+
+
+            # TODO: None of these should be equal to point. Check for this. 
+            rand_x = random.uniform(0.0, 1.0)
+            rand_y = random.uniform(0.0, 1.0)
+
+            #just initializing
+            update_x = 0
+            update_y = 0
+            if rand_x < cross_prob:
+                update_x = a[0] + f * (b[0] - c[0])
+            if rand_y < cross_prob:
+                update_y = a[1] + f * (b[1] - c[1])
+            #print("UPDATES", update_x, update_y)
+
+            try:
+                update_x_index = get_domain_index(update_x, len(z_list))
+                update_y_index = get_domain_index(update_y, len(z_list))
+
+
+                point_x_index = get_domain_index(point[0], len(z_list))
+                point_y_index = get_domain_index(point[1], len(z_list))
+
+            
+            
+                if z_list[update_x_index][update_y_index] <= z_list[point_x_index][point_y_index]:
+                    point = (update_x, update_y)
+
+                if z_list[point_x_index][point_y_index] < min_val:
+                    min_val = z_list[point_x_index][point_y_index]
+                    min_point = point[0], point[1]
+                    print("NEW MIN", min_point)
+            except IndexError:
+                continue 
+        x_stops.append(min_point[0])
+        y_stops.append(min_point[1])
+        z_stops.append(FUNC(min_point[0], min_point[1]))
+        print("Diffevol min: ", z_stops[-1])
     
 
+    final_x, final_y = min_point
+    final_z = FUNC(final_x, final_y)
+    return ((final_x, final_y, final_z), (x_stops, y_stops, z_stops))
 
 
 
 
-
-def nelder_mead(x_list, y_list, z_list, batches):
+def nelder_mead(FUNC, x_list, y_list, z_list, batches=30):
     
     """
     Downhill simplex method
     """
-    lower_bound = int((len(x_list)/2) - (len(x_list)/4))
+    print("NELDER MEAD OPTIMIZATION")
+    #lower_bound = int((len(x_list)/3) - (len(x_list)/3.5))
+    lower_bound = 0
     print(lower_bound)
-    upper_bound = int((len(x_list)/2) + (len(x_list)/4))
+    #upper_bound = int((len(x_list)/3) + (len(x_list)/3.5))
+    upper_bound = len(x_list)-1
     print(upper_bound)
 
     domain_subsection = x_list[lower_bound:upper_bound]
@@ -131,6 +202,7 @@ def nelder_mead(x_list, y_list, z_list, batches):
 
     x_stops = []
     y_stops = []
+    z_stops = []
     
     # sorts based off of the height (z-coordinate)
     # The simplex array should always be sorted
@@ -138,11 +210,15 @@ def nelder_mead(x_list, y_list, z_list, batches):
     for iteration in range(batches):
         
         simplex.sort(key = lambda x: x[2])
-        print("SORTED: " + str(simplex))
+        #print("SORTED: " + str(simplex))
 
         #compute the centroid from the points in the simplex sans p3
         sums = [sum(x) for x in zip(*simplex[:-1])]
-        p0 = [sums[0]/3, sums[1]/3, FUNC(sums[0]/3, sums[1]/3)]
+        p0 = [sums[0]/2, sums[1]/2, FUNC(sums[0]/2, sums[1]/2)]
+        x_stops.append(p0[0])
+        y_stops.append(p0[1])
+        z_stops.append(p0[2])
+        print("Z is::", p0[2])
 
         #compute reflected point (reflection of the fourth point across the centroid p0
         #coeff of reflection initialized to 1
@@ -153,12 +229,12 @@ def nelder_mead(x_list, y_list, z_list, batches):
         pr[2] = FUNC(pr[0], pr[1])
          
         if (pr[2] < simplex[-2][2]) and (pr[2] >= simplex[0][2]):
-            print("REFLECTION")
+            #print("REFLECTION")
             simplex[-2] = pr
             continue
 
         elif pr[2] < simplex[0][2]:
-            print("EXPANSION")
+            #print("EXPANSION")
             # coefficient gamma (G) must be > 1
             G = 2
             pe = [0, 0, 0]
@@ -176,7 +252,7 @@ def nelder_mead(x_list, y_list, z_list, batches):
         else:
             # it is certain at this point that the reflected point is worse
             # than the second worst point
-            print("CONTRACTION")
+            #print("CONTRACTION")
             rho = 0.5
 
             pc = [0, 0, 0]
@@ -192,7 +268,7 @@ def nelder_mead(x_list, y_list, z_list, batches):
             else:
                 # 'shrink' step
                 # replace all points except the first one
-                print("SHRINK")
+                #print("SHRINK")
                 sigma = 0.5
 
                 best_point = simplex[0]
@@ -201,23 +277,22 @@ def nelder_mead(x_list, y_list, z_list, batches):
                     point[0] = best_point[0] + sigma*(point[0] - best_point[0]) 
                     point[1] = best_point[1] + sigma*(point[1] - best_point[1]) 
             
-        x_stops.append(p0[0])
-        y_stops.append(p0[1])
         
-
-    for point in range(len(x_stops)):
-        z_list[get_domain_index(x_stops[point], len(z_list))][get_domain_index(y_stops[point], len(z_list))] *= 5
-
-    plt.plot(x_stops, label="amoeba-x")
-    plt.plot(y_stops, label="amoeba-y")
-    plt.legend(loc='upper right') 
+    #z_list = mark_topography(x_list, y_list, z_list) 
+    
+    #plt.plot(x_stops, label="amoeba-x")
+    #plt.plot(y_stops, label="amoeba-y")
+    #plt.legend(loc='upper right') 
+    final_z = p0[2]
+    print(x_stops)
+    #print(z_stops[:100])
         
-    return ((p0[0], p0[1]), z_list)
+    return ((p0[0], p0[1], final_z), (x_stops, y_stops, z_stops))
 
 
 
 
-def newton(x_list, y_list, z_list, batches, learning_rate):
+def newton(FUNC, x_list, y_list, z_list, batches=5, learning_rate=1e-9):
 
     """
     Note: This is the bona-fide newton's method that
@@ -232,6 +307,7 @@ def newton(x_list, y_list, z_list, batches, learning_rate):
         This is probably/possibly an issue with this implementation..
 
     """
+    print("NEWTON'S METHOD OPTIMIZATION")
 
 
     random.seed(RAND_SEED)
@@ -241,6 +317,7 @@ def newton(x_list, y_list, z_list, batches, learning_rate):
 	
     x_stops = [descending_x]
     y_stops = [descending_y] 
+    z_stops = [FUNC(descending_x, descending_y)]
 
     print("Newton STARTING LOCATIONS: X: " + str(descending_x) + " Y: " + str(descending_y))
 
@@ -257,9 +334,9 @@ def newton(x_list, y_list, z_list, batches, learning_rate):
 
         try:
             index_prev_x = get_domain_index(descending_x, len(z_list))
-            print(index_prev_x)
+            #print(index_prev_x)
             index_prev_y = get_domain_index(descending_y, len(z_list))
-            print(index_prev_y)
+            #print(index_prev_y)
 
             #for the hessian we compute the second order with respect to
             #x, y, xy, yx
@@ -290,32 +367,32 @@ def newton(x_list, y_list, z_list, batches, learning_rate):
             
             x_stops.append(descending_x)
             y_stops.append(descending_y)
+            z_stops.append(FUNC(descending_x, descending_y))
 
-            print("DESCENDING X: " + str(descending_x))
-            print("DESCENDING Y: " + str(descending_y))
         
         except IndexError:
             print("ERROR: OUT OF BOUNDS")
-            return
-
-    plt.plot(x_stops, label='x_newton')
-    plt.plot(y_stops, label='y_newton')
-    plt.legend(loc='upper right') 
-
-    return (descending_x, descending_y)
+            learning_rate /= 10
+            #return
+    final_z = z_stops[-1]
+    return ((descending_x, descending_y, final_z), (x_stops, y_stops, z_stops))
 
 
-def gradient_descent(x_list, y_list, z_list, batches, epochs, learning_rate):
+def gradient_descent(FUNC, x_list, y_list, z_list, epochs=1000, batches=10, learning_rate=0.1):
+    
+    print("GRADIENT DESCENT OPTIMIZATION")
 
     random.seed(RAND_SEED)
     descending_x = x_list[random.randint(0, len(x_list)-1)] 
     random.seed(RAND_SEED)
     descending_y = y_list[random.randint(0, len(y_list)-1)]
 
+    z_stops = [FUNC(descending_x, descending_y)]
+
     x_stops = [descending_x]
     y_stops = [descending_y] 
 
-    print("STARTING LOCATIONS: X: " + str(descending_x) + " Y: " + str(descending_y))
+    #print("STARTING LOCATIONS: X: " + str(descending_x) + " Y: " + str(descending_y))
 
     for epoch in range(epochs): 
         for iterations in range(batches):
@@ -345,14 +422,15 @@ def gradient_descent(x_list, y_list, z_list, batches, epochs, learning_rate):
 
             descending_x -= T_x 
 
-            print("T_x" + str(T_x))
-            print("Descending x: " + str(descending_x))
+            #print("T_x" + str(T_x))
+            #print("Descending x: " + str(descending_x))
             #print("Descending x: {}".format(descending_x))
             descending_y -= T_y
 
                 
             x_stops.append(descending_x)
             y_stops.append(descending_y)
+            z_stops.append(FUNC(descending_x, descending_y))
 
             #print("X-grad: ", str(x_grad), "Y-grad: ", str(y_grad), "rand_x: ", str(x_list[rand_x]), "rand_y", str(y_list[rand_y]))
         
@@ -362,14 +440,15 @@ def gradient_descent(x_list, y_list, z_list, batches, epochs, learning_rate):
     x_label = 'x_standard'
     y_label = 'y_standard'
     
-    plt.plot(x_stops, label=x_label)
-    plt.plot(y_stops, label=y_label)
-    plt.legend(loc='upper right') 
 
-    return (descending_x, descending_y)
+    #z_list = mark_topography(x_stops, y_stops, z_list)
+    final_z = FUNC(descending_x, descending_y) 
+    print("Marked topography")
+
+    return ((descending_x, descending_y, final_z), (x_stops, y_stops, z_stops))
 
 
-def sgd(x_list, y_list, z_list, batches, epochs, learning_rate, momentum=False, alpha=0.0):
+def sgd(FUNC, x_list, y_list, z_list, batches, epochs=1000, learning_rate=0.1, momentum=False, alpha=0.0):
 
     """ This is just standard sgd implementation
         
@@ -430,15 +509,15 @@ def sgd(x_list, y_list, z_list, batches, epochs, learning_rate, momentum=False, 
             T_y = learning_rate * y_grad
 
             descending_x -= T_x 
-            print("T_x" + str(T_x))
-            print("Descending x: " + str(descending_x))
+            #print("T_x" + str(T_x))
+            #print("Descending x: " + str(descending_x))
             #print("Descending x: {}".format(descending_x))
             descending_y -= T_y
 
 
             if momentum:
                 descending_x += (alpha) * (prev_update_x)
-                print("Prev_update_x: " + str(prev_update_x))
+                #print("Prev_update_x: " + str(prev_update_x))
                 descending_y += (alpha) * (prev_update_y)
 
                 prev_update_x = (alpha) * (prev_update_x) - T_x
@@ -469,37 +548,25 @@ def sgd(x_list, y_list, z_list, batches, epochs, learning_rate, momentum=False, 
     return (descending_x, descending_y)
 
 
+def simulated_annealing(FUNC, x_list, y_list, z_list, batches):
+    pass
 
-def plot_3d(X, Y, Z, minimum_coords):
-    
+def stochastic_tunneling(FUNC, x_list, y_list, z_list, batches):
+    return 
 
-    x_min, y_min = minimum_coords
-
-    fig = plt.figure()
-    ax = Axes3D(fig)
-
-
-    print("=========================================================")
+def custom(FUNC, x_list, y_list, z_list, batches):
+    pass
 
 
-    ax.plot_surface(Y, X, Z, rstride=1, cstride=1, cmap="terrain", antialiased =True)
 
-    #text = "Global Minimum: " + str(x_min) + " : " + str(y_min) + " : " + str(banana(x_min, y_min))
-    text = "Global Minimum: " + str(x_min) + " : " + str(y_min) + " : " + str(FUNC(x_min, y_min))
 
-    #ax.text(x_min, y_min, banana(x_min, y_min), text, size=20) 
-    ax.text(x_min, y_min, FUNC(x_min, y_min), text, size=20) 
-    plt.show()
 
+
+"""
 
 
 def __main__():
 
-    """
-    if os.path.isfile('banana.obj'):
-        fhandle = open('banana.obj', "rb")
-        pickle.load( 
-    """
 
     #x_list = [x for x in np.arange(-2, 2.0005, 0.0005)]
     x_list = [x for x in np.arange(-DOMAIN_MAX, DOMAIN_MAX+0.005, DOMAIN_DX)]
@@ -523,20 +590,11 @@ def __main__():
     print("Finshed computing Rosenbrock Banana")
 
 
-    #minimum_coords_1 = sgd(x_list, y_list, z_list, 10, 1000, 0.0001)
-    #minimum_coords_2 = sgd(x_list, y_list, z_list, 100, 100, 0.0001, True, 0.5)
-    #minimum_coords_3 = newton(x_list, y_list, z_list, 10, 0.000001) 
-    
-    #minimum_coords_1 = sgd(x_list, y_list, z_list, 10000, 100000000000000000000000000000000000000000, 0.1)
-    #minimum_coords_2 = sgd(x_list, y_list, z_list, 100, 500, 1, True, 0.5)
-
-    #minimum_coords_1 = gradient_descent(x_list, y_list, z_list, 100, 1000, 0.1)
-    #minimum_coords_1 = newton(x_list, y_list, z_list, 500, 0.00000000001)
-    minimum_coords_1, z_list = nelder_mead(x_list, y_list, z_list, 1000)
+    minimum_coords_1, z_list = gradient_descent(x_list, y_list, z_list, 1000, 10, 0.1)
 
 
-    #lower offset gives a more accurate function 
-    offset = DOMAIN_DX
+    #lower offset gives a more accurate function plot 
+    offset = 100
     
     
     
@@ -581,3 +639,7 @@ def __main__():
 
 
 __main__()
+
+
+
+"""

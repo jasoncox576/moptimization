@@ -64,3 +64,9 @@ def banana(x, y):
 
     return ((a-x)**2) + (b*(y-(x**2)))**2
 
+
+
+
+
+
+
