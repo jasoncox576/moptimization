@@ -4,6 +4,7 @@ import numpy as np
 import math
 
 from functions import *
+from util import *
 
 #from sympy import symbols, diff
 
@@ -448,198 +449,137 @@ def gradient_descent(FUNC, x_list, y_list, z_list, epochs=1000, batches=10, lear
     return ((descending_x, descending_y, final_z), (x_stops, y_stops, z_stops))
 
 
-def sgd(FUNC, x_list, y_list, z_list, batches, epochs=1000, learning_rate=0.1, momentum=False, alpha=0.0):
 
-    """ This is just standard sgd implementation
-        
-        If momentum set to True, will execute the momentum variant of sgd
-        the alpha parameter must be set as well to something other than zero.
-    
-    """
-    
-    #initialize a member to store value of current update
-    # only used for momentum
-    prev_update_x = 0.0
-    prev_update_y = 0.0
+def stochastic_tunneling(FUNC, x_list, y_list, z_list, batches=50000):
 
 
 
-
-    # pick a random x, y
-    
-    print(np.shape(x_list))
-
-    # initialize a random x and y and attempt to optimize
-    
     random.seed(RAND_SEED)
-    descending_x = x_list[random.randint(0, len(x_list)-1)] 
+    current_x = x_list[random.randint(0, len(x_list)-1)] 
     random.seed(RAND_SEED)
-    descending_y = y_list[random.randint(0, len(y_list)-1)]
+    current_y = y_list[random.randint(0, len(y_list)-1)]
 
+    gamma = 0.5
+    beta = 0.5
+    current_min = FUNC(current_x, current_y)
+    current_val = current_min 
+    
+    x_stops = [current_x]
+    y_stops = [current_y]
+    z_stops = [current_val]
 
-    #descending_x = 0
-    #descending_y = 0
+    def fstun(z): 
+        return 1-np.exp(gamma * (z - current_min))
 
-    x_stops = [descending_x]
-    y_stops = [descending_y] 
+    for x in range(batches):
+        new_x, new_y = random.choice(x_list), random.choice(y_list)
+        delta = abs(fstun(FUNC(new_x, new_y)) - fstun(current_val)) 
+        prob_jump = min(1, np.exp(-beta * delta)) 
+        if np.random.uniform(0, 1.00000001, 1)[0] <= prob_jump:
+            current_val = FUNC(new_x, new_y)
+            x_stops.append(new_x)
+            y_stops.append(new_y)
+            z_stops.append(current_val)
+            if current_val < current_min:
+                current_min = current_val
+                current_x, current_y = new_x, new_y
 
-    print("STARTING LOCATIONS: X: " + str(descending_x) + " Y: " + str(descending_y))
-
-    for epoch in range(10): 
-        for iterations in range(500):
-            rand_x = random.randint(0, len(x_list)-1)
-            rand_y = random.randint(0, len(y_list)-1)
-
-            #Compute partial with respect to x
-            # first, fix the 'y' and grab that array:
-
-            x_slice = z_list[rand_y]
-            partial_dx = np.gradient(x_slice) 
-            #now that we have a 'gradient' (sort of) for each element in this slice we 
-            # can pick out the one corresponding to our fixed x or y coord
-            x_grad = partial_dx[rand_x] 
-
-        
-            y_slice = np.transpose(z_list)[rand_x]
-            partial_dy = np.gradient(y_slice)
-            y_grad = partial_dy[rand_y]
             
+    return ((current_x, current_y, current_val), (x_stops, y_stops, z_stops)) 
 
-            T_x = learning_rate * x_grad
-            T_y = learning_rate * y_grad
+def quadtree(FUNC, x_list, y_list, z_list, batches=100, num_samples=10000):
 
-            descending_x -= T_x 
-            #print("T_x" + str(T_x))
-            #print("Descending x: " + str(descending_x))
-            #print("Descending x: {}".format(descending_x))
-            descending_y -= T_y
+    """
+    1- divide domain into 4 squares
+    2- uniformly sample points in domain
+    3- select the best d squares based off of points
+    4- For each domain in current_domains:
+    5- Subdivide and repeat    
+    """
 
 
-            if momentum:
-                descending_x += (alpha) * (prev_update_x)
-                #print("Prev_update_x: " + str(prev_update_x))
-                descending_y += (alpha) * (prev_update_y)
+    min_x = 0
+    mid_x = len(x_list)/2
+    max_x = len(x_list)
 
-                prev_update_x = (alpha) * (prev_update_x) - T_x
-                prev_update_y = (alpha) * (prev_update_y) - T_y
 
-            #print(descending_x, descending_y)
-                
-            x_stops.append(descending_x)
-            y_stops.append(descending_y)
+    min_y = 0
+    mid_y = len(y_list)/2
+    max_y = len(y_list)
 
-            #print("X-grad: ", str(x_grad), "Y-grad: ", str(y_grad), "rand_x: ", str(x_list[rand_x]), "rand_y", str(y_list[rand_y]))
+    top_left = [(min_x,mid_x), (min_y, mid_y)]
+    top_right = [(mid_x,max_x), (min_y, mid_y)]
+    bottom_left = [(min_x, mid_x), (mid_y, max_y)]
+    bottom_right = [(mid_x, max_x), (mid_y, max_y)]
+    
+    
+    x_stops = y_stops = z_stops = []
+
+
+    def is_in(square, point):
+        x_lower, x_upper = square[0]
+        y_lower, y_upper = square[1]
+        if ((point[0] >= x_lower) and (point[0] <= x_upper)) and ((point[1] >= y_lower) and (point[1] <= y_upper)):
+            return True 
+        return False
+    
+    min_val = 9e9
+    sampled_points = []
+    for iteration in range(batches):
+        print(min_x, mid_x, max_x)
+        print(min_y, mid_y, max_y)
+        sampled_points = [(random.choice(x_list), random.choice(y_list)) for x in range(num_samples)]
+        min_index = np.argmin([z_list[get_domain_index(point[0], len(z_list))][get_domain_index(point[1], len(z_list))] for point in sampled_points])
+        temp_x, temp_y = sampled_points[min_index]
+        temp_z = z_list[get_domain_index(temp_x, len(z_list))][get_domain_index(temp_y, len(z_list))]
+        min_point = (temp_x, temp_y, temp_z)
+        if (iteration == 0) or (min_point[2] < min_val):
+            min_val = min_point
+        else:
+            continue
         
-        #You NEED the below line
-        learning_rate =  learning_rate / 10
+        x_stops.append(min_point[0])
+        y_stops.append(min_point[1])
+        z_stops.append(min_point[2])
+
+    
+        if is_in(top_left, min_point):
+            mid_x /= 2
+            max_x /= 2
+            
+            mid_y /= 2
+            max_y /= 2
+        elif is_in(top_right, min_point):
+            min_x = mid_x
+            mid_x = int(np.mean((min_x, max_x)))
+            
+            mid_y /= 2
+            max_y /= 2
+        elif is_in(bottom_left, min_point):
+            mid_x /= 2
+            max_x /= 2
+            
+            min_y = mid_y
+            mid_y = int(np.mean((min_y, max_y)))
+        else:
+            min_x = mid_x
+            mid_x = int(np.mean((min_x, max_x)))
+            
+            min_y = mid_y
+            mid_y = int(np.mean((min_y, max_y)))
+
+        top_left = [(min_x,mid_x), (min_y, mid_y)]
+        top_right = [(mid_x,max_x), (min_y, mid_y)]
+        bottom_left = [(min_x, mid_x), (mid_y, max_y)]
+        bottom_right = [(mid_x, max_x), (mid_y, max_y)]
+
+
+    final_x, final_y, final_z = min_point
         
-
-    if momentum: 
-        x_label = 'x_momentum'
-        y_label = 'y_momentum'
-    else:
-        x_label = 'x_standard'
-        y_label = 'y_standard'
-    
-    plt.plot(x_stops, label=x_label)
-    plt.plot(y_stops, label=y_label)
-    plt.legend(loc='upper right') 
-
-    return (descending_x, descending_y)
-
-
-def simulated_annealing(FUNC, x_list, y_list, z_list, batches):
-    pass
-
-def stochastic_tunneling(FUNC, x_list, y_list, z_list, batches):
-    return 
-
-def custom(FUNC, x_list, y_list, z_list, batches):
-    pass
+        
+    return ((final_x, final_y, final_z), (x_stops, y_stops, z_stops))
 
 
 
 
 
-
-"""
-
-
-def __main__():
-
-
-    #x_list = [x for x in np.arange(-2, 2.0005, 0.0005)]
-    x_list = [x for x in np.arange(-DOMAIN_MAX, DOMAIN_MAX+0.005, DOMAIN_DX)]
-    
-    #y_list = [x for x in np.arange(-2, 2.0005, 0.0005)]
-    y_list = [y for y in np.arange(-DOMAIN_MAX, DOMAIN_MAX+0.005, DOMAIN_DX)]
-
-    #Note: when plotting function it may be best to just use
-    #a subset of the total samples so that it may render.
-
-    Y, X = np.meshgrid(y_list, x_list)
-
-    z_list = np.empty([len(x_list), len(y_list)])
-    for y_index in range(len(y_list)):
-        for x_index in range(len(x_list)):
-            #z = banana(x_list[x_index], y_list[y_index])
-            z = FUNC(x_list[x_index], y_list[y_index])
-            z_list[y_index][x_index] = z
-    
-     
-    print("Finshed computing Rosenbrock Banana")
-
-
-    minimum_coords_1, z_list = gradient_descent(x_list, y_list, z_list, 1000, 10, 0.1)
-
-
-    #lower offset gives a more accurate function plot 
-    offset = 100
-    
-    
-    
-    plot_x_list = [x_list[x] for x in np.arange(0, len(x_list), offset)]
-    plot_y_list = [y_list[y] for y in np.arange(0, len(y_list), offset)]
-
-    #plot_x_list = np.rint(plot_x_list)
-    #plot_y_list = np.rint(plot_y_list)
-
-
-
-    plot_z_list = np.empty([len(plot_y_list), len(plot_x_list)])
-
-
-    #Fill up plot-z list
-    for y in range(len(plot_y_list)):
-        for x in range(len(plot_x_list)):
-            plot_z_list[y][x] = z_list[y*offset][x*offset]
-         
-    plot_z_list = np.rint(plot_z_list)
-
-    
-    Y, X = np.meshgrid(plot_y_list, plot_x_list) 
-    print("Meshed grid...") 
-    
-    #print("Regular sgd: " + str(banana(minimum_coords_1[0], minimum_coords_1[1])))
-    #print("sgd with momentum: " + str(banana(minimum_coords_2[0], minimum_coords_2[1])))
-    #print("Newton's method: " + str(banana(minimum_coords_3[0], minimum_coords_3[1])))
-
-    print("Regular sgd: " + str(FUNC(minimum_coords_1[0], minimum_coords_1[1])))
-    #print("sgd with momentum: " + str(FUNC(minimum_coords_2[0], minimum_coords_2[1])))
-    #print("Newton's method: " + str(himmelblau(minimum_coords_3[0], minimum_coords_3[1])))
-
-    plot_3d(X, Y, plot_z_list, minimum_coords_1)
-    #plot_3d(X, Y, plot_z_list, minimum_coords_2)
-    #plot_3d(X, Y, plot_z_list, minimum_coords_3)
-
-
-
-
-
-
-
-__main__()
-
-
-
-"""

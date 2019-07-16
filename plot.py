@@ -1,10 +1,11 @@
 from mpl_toolkits.mplot3d import Axes3D
 import matplotlib.pyplot as plt
+import numpy as np
 
 
 def plot_3x3(zs, labels):
 
-    fig, ax = plt.subplots(nrows=3, ncols=3)
+    fig, ax = plt.subplots(nrows=2, ncols=3)
     index=0
     for row in ax:
         for col in row:
@@ -34,7 +35,7 @@ def plot_2d(xs, ys, zs):
 
     plt.show()
 
-def plot_3d(X, Y, Z, minimum_coords):
+def plot_3d(FUNC, X, Y, Z, minimum_coords):
     
 
     x_min, y_min = minimum_coords
@@ -42,11 +43,15 @@ def plot_3d(X, Y, Z, minimum_coords):
     fig = plt.figure()
     ax = Axes3D(fig)
 
+    Y, X = np.meshgrid(Y, X) 
+
+
 
     print("=========================================================")
 
 
     ax.plot_surface(X, Y, Z, rstride=1, cstride=1, cmap="terrain", antialiased =True)
+    #ax.plot_surface(X, Y, Z, rstride=1, cstride=1, cmap="terrain")
 
     #text = "Global Minimum: " + str(x_min) + " : " + str(y_min) + " : " + str(banana(x_min, y_min))
     text = "Global Minimum: " + str(x_min) + " : " + str(y_min) + " : " + str(FUNC(x_min, y_min))
